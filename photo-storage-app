@@ -1,0 +1,189 @@
+cd photo-storage-app
+npm install
+npm run dev
+// File: vite.config.js
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+});
+
+// File: package.json
+{
+  "name": "photo-storage-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^10.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@shadcn/ui": "^0.4.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.0.0"
+  }
+}
+
+// File: public/index.html
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Photo Storage App</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
+// File: src/main.jsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './components/App';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+// File: src/firebaseConfig.js
+import { initializeApp } from 'firebase/app';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC8YvTLVXhG52DJcmX7hzMluhX071rGWMs" ,
+  authDomain: "spark-plan-gratis.firebaseapp.com" ,
+  projectId: "spark-plan-gratis" ,
+  storageBucket: "spark-plan-gratis.firebasestorage.app",
+  messagingSenderId: "494012094289",
+  appId: "1:494012094289:web:875017695535ac48ec6570",
+};
+
+const app = initializeApp(firebaseConfig);
+export default app;
+
+// File: src/components/App.jsx
+import React, { useEffect, useState } from 'react';
+import app from '../firebaseConfig';
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  onAuthStateChanged,
+  signOut
+} from 'firebase/auth';
+import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  listAll,
+  deleteObject
+} from 'firebase/storage';
+
+const auth = getAuth(app);
+const storage = getStorage(app);
+
+function App() {
+  const [user, setUser] = useState(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [file, setFile] = useState(null);
+  const [images, setImages] = useState([]);
+
+  useEffect(() => {
+    onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (u) fetchImages(u.uid);
+    });
+  }, []);
+
+  const register = async () => {
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const login = async () => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  const logout = () => {
+    signOut(auth);
+  };
+
+  const upload = async () => {
+    if (!file || !user) return;
+    const fileRef = ref(storage, `${user.uid}/${file.name}`);
+    await uploadBytes(fileRef, file);
+    fetchImages(user.uid);
+  };
+
+  const fetchImages = async (uid) => {
+    const folderRef = ref(storage, uid);
+    const result = await listAll(folderRef);
+    const urls = await Promise.all(
+      result.items.map((item) => getDownloadURL(item))
+    );
+    setImages(urls);
+  };
+
+  const deleteImage = async (url) => {
+    const imageRef = ref(storage, decodeURIComponent(new URL(url).pathname.split("/o/")[1].split("?")[0]));
+    await deleteObject(imageRef);
+    fetchImages(user.uid);
+  };
+
+  return (
+    <div className="p-4 max-w-xl mx-auto text-center">
+      <h1 className="text-2xl font-bold mb-4">📷 Photo Storage App</h1>
+
+      {!user ? (
+        <div className="space-y-2">
+          <input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} className="border p-2 w-full" />
+          <input placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} className="border p-2 w-full" />
+          <div className="flex gap-2 justify-center">
+            <button onClick={register} className="bg-green-500 text-white px-4 py-2 rounded">Register</button>
+            <button onClick={login} className="bg-blue-500 text-white px-4 py-2 rounded">Login</button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <p className="mb-2">Welcome, {user.email}</p>
+          <button onClick={logout} className="bg-gray-500 text-white px-4 py-2 rounded mb-4">Logout</button>
+
+          <div className="mb-4">
+            <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+            <button onClick={upload} className="bg-purple-500 text-white px-4 py-2 ml-2 rounded">Upload</button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            {images.map((url, idx) => (
+              <div key={idx} className="relative">
+                <img src={url} alt="Uploaded" className="w-full rounded shadow" />
+                <button onClick={() => deleteImage(url)} className="absolute top-1 right-1 bg-red-600 text-white px-2 py-1 text-xs rounded">Delete</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;
